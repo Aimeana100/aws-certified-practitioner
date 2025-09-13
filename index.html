@@ -88,10 +88,101 @@
             display: flex;
             justify-content: space-between;
             align-items: center;
+            margin-bottom: 20px;
+            padding: 20px;
+            background: #f8f9fa;
+            border-radius: 12px;
+        }
+
+        .progress-stats {
+            display: flex;
+            justify-content: space-around;
+            margin-bottom: 20px;
+            padding: 15px;
+            background: #e9ecef;
+            border-radius: 10px;
+        }
+
+        .stat-item {
+            text-align: center;
+        }
+
+        .stat-label {
+            display: block;
+            font-size: 0.9em;
+            color: #666;
+            margin-bottom: 5px;
+        }
+
+        .stat-value {
+            display: block;
+            font-size: 1.5em;
+            font-weight: bold;
+            color: #333;
+        }
+
+        .question-navigation {
             margin-bottom: 30px;
             padding: 20px;
             background: #f8f9fa;
             border-radius: 12px;
+        }
+
+        .question-navigation h4 {
+            margin-bottom: 15px;
+            color: #333;
+            text-align: center;
+        }
+
+        .nav-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fill, minmax(40px, 1fr));
+            gap: 8px;
+            max-height: 200px;
+            overflow-y: auto;
+        }
+
+        .nav-btn {
+            width: 40px;
+            height: 40px;
+            border: 2px solid #ddd;
+            border-radius: 8px;
+            background: white;
+            cursor: pointer;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-weight: bold;
+            transition: all 0.2s ease;
+        }
+
+        .nav-btn:hover {
+            border-color: #667eea;
+            background: #f0f2ff;
+        }
+
+        .nav-btn.current {
+            border-color: #667eea;
+            background: #667eea;
+            color: white;
+        }
+
+        .nav-btn.correct {
+            border-color: #28a745;
+            background: #28a745;
+            color: white;
+        }
+
+        .nav-btn.incorrect {
+            border-color: #dc3545;
+            background: #dc3545;
+            color: white;
+        }
+
+        .nav-btn.answered {
+            border-color: #ffc107;
+            background: #ffc107;
+            color: #333;
         }
 
         .question-number {
@@ -321,7 +412,27 @@
             <div class="question-container" id="questionContainer">
                 <div class="question-header">
                     <span class="question-number" id="questionNumber">Question 1 of 65</span>
-                    <span class="timer" id="timer">90:00</span>
+                    <span class="timer" id="timer">X</span>
+                </div>
+
+                <div class="progress-stats">
+                    <div class="stat-item">
+                        <span class="stat-label">Correct:</span>
+                        <span class="stat-value" id="correctCount">0</span>
+                    </div>
+                    <div class="stat-item">
+                        <span class="stat-label">Incorrect:</span>
+                        <span class="stat-value" id="incorrectCount">0</span>
+                    </div>
+                    <div class="stat-item">
+                        <span class="stat-label">Unanswered:</span>
+                        <span class="stat-value" id="unansweredCount">65</span>
+                    </div>
+                </div>
+
+                <div class="question-navigation">
+                    <h4>Jump to Question:</h4>
+                    <div class="nav-grid" id="navGrid"></div>
                 </div>
 
                 <div class="question" id="questionDiv">
@@ -5662,17 +5773,20 @@ const questions = [
 
         let currentQuestion = 0;
         let selectedAnswers = {};
-        let timeRemaining = 210 * 60; // 90 minutes in seconds
+        let timeRemaining =500 * 60; // 90 minutes in seconds
         let timerInterval;
         let examStarted = false;
+        let questionStatus = {}; // Track status of each question: 'correct', 'incorrect', 'unanswered'
 
         function startExam() {
             document.getElementById('startScreen').style.display = 'none';
             document.getElementById('questionContainer').style.display = 'block';
             examStarted = true;
             startTimer();
+            initializeNavigation();
             showQuestion();
             updateProgress();
+            updateStats();
         }
 
         function startTimer() {
@@ -5717,7 +5831,16 @@ const questions = [
 
             // Restore previous selection if exists
             if (selectedAnswers[currentQuestion] !== undefined) {
-                selectOption(selectedAnswers[currentQuestion], false);
+                if (Array.isArray(selectedAnswers[currentQuestion])) {
+                    // Multiple choice - restore all selections
+                    selectedAnswers[currentQuestion].forEach(index => {
+                        const option = document.querySelector(`[data-index="${index}"]`);
+                        if (option) option.classList.add('selected');
+                    });
+                } else {
+                    // Single choice - restore selection
+                    selectOption(selectedAnswers[currentQuestion], false);
+                }
             }
 
             // Hide explanation
@@ -5727,43 +5850,110 @@ const questions = [
             document.getElementById('prevBtn').style.display = currentQuestion > 0 ? 'inline-block' : 'none';
             document.getElementById('nextBtn').style.display = currentQuestion < questions.length - 1 ? 'inline-block' : 'none';
             document.getElementById('finishBtn').style.display = currentQuestion === questions.length - 1 ? 'inline-block' : 'none';
+            
+            // Update navigation buttons
+            updateNavigationButtons();
         }
 
         function selectOption(index, showExplanation = true) {
-            // Remove previous selections
-            document.querySelectorAll('.option').forEach(opt => {
-                opt.classList.remove('selected', 'correct', 'incorrect');
-            });
+            const q = questions[currentQuestion];
+            const correctIndices = Array.isArray(q.correct) ? q.correct : [q.correct];
+            const isMultipleChoice = Array.isArray(q.correct);
+            
+            // For single choice questions, remove all previous selections
+            if (!isMultipleChoice) {
+                document.querySelectorAll('.option').forEach(opt => {
+                    opt.classList.remove('selected', 'correct', 'incorrect');
+                });
+            }
 
             // Mark selected option
             const selectedOption = document.querySelector(`[data-index="${index}"]`);
-            selectedOption.classList.add('selected');
             
-            // Store answer
-            selectedAnswers[currentQuestion] = index;
+            // For multiple choice questions, toggle selection
+            if (isMultipleChoice) {
+                if (selectedOption.classList.contains('selected')) {
+                    // Deselect if already selected
+                    selectedOption.classList.remove('selected');
+                    // Remove from selected answers array
+                    if (selectedAnswers[currentQuestion]) {
+                        selectedAnswers[currentQuestion] = selectedAnswers[currentQuestion].filter(i => i !== index);
+                        if (selectedAnswers[currentQuestion].length === 0) {
+                            delete selectedAnswers[currentQuestion];
+                        }
+                    }
+                } else {
+                    // Select if not selected
+                    selectedOption.classList.add('selected');
+                    // Add to selected answers array
+                    if (!selectedAnswers[currentQuestion]) {
+                        selectedAnswers[currentQuestion] = [];
+                    }
+                    if (!selectedAnswers[currentQuestion].includes(index)) {
+                        selectedAnswers[currentQuestion].push(index);
+                    }
+                }
+            } else {
+                // Single choice - just select
+                selectedOption.classList.add('selected');
+                selectedAnswers[currentQuestion] = index;
+            }
 
             if (showExplanation) {
-                // Show correct answer(s) (supports single index or array of indices)
-                const q = questions[currentQuestion];
-                const correctIndices = Array.isArray(q.correct) ? q.correct : [q.correct];
-
-                // Mark all correct options
-                correctIndices.forEach(ci => {
-                  const opt = document.querySelector(`[data-index="${ci}"]`);
-                  if (opt) opt.classList.add('correct');
-                });
-
-                // Mark selected option incorrect if it's not one of the correct indices
-                if (!correctIndices.includes(index)) {
-                  selectedOption.classList.add('incorrect');
+                // Only show explanation and mark correct/incorrect when user has made their final selection
+                let shouldShowExplanation = false;
+                
+                if (isMultipleChoice) {
+                    // For multiple choice, show explanation when user has selected the required number of options
+                    const selectedCount = selectedAnswers[currentQuestion] ? selectedAnswers[currentQuestion].length : 0;
+                    shouldShowExplanation = selectedCount === correctIndices.length;
                 } else {
-                  // Ensure selected option also shows as correct when appropriate
-                  selectedOption.classList.add('correct');
+                    // For single choice, show explanation immediately
+                    shouldShowExplanation = true;
                 }
 
-                // Show explanation
-                document.getElementById('explanation').style.display = 'block';
-                document.getElementById('explanationText').textContent = q.explanation;
+                if (shouldShowExplanation) {
+                    // Mark all correct options
+                    correctIndices.forEach(ci => {
+                        const opt = document.querySelector(`[data-index="${ci}"]`);
+                        if (opt) opt.classList.add('correct');
+                    });
+
+                    // Mark incorrect selections
+                    if (isMultipleChoice) {
+                        const userSelections = selectedAnswers[currentQuestion] || [];
+                        userSelections.forEach(selection => {
+                            if (!correctIndices.includes(selection)) {
+                                const opt = document.querySelector(`[data-index="${selection}"]`);
+                                if (opt) opt.classList.add('incorrect');
+                            }
+                        });
+                    } else {
+                        if (!correctIndices.includes(index)) {
+                            selectedOption.classList.add('incorrect');
+                        }
+                    }
+
+                    // Determine question status
+                    let isCorrect = false;
+                    if (isMultipleChoice) {
+                        const userSelections = selectedAnswers[currentQuestion] || [];
+                        isCorrect = userSelections.length === correctIndices.length && 
+                                   userSelections.every(sel => correctIndices.includes(sel));
+                    } else {
+                        isCorrect = correctIndices.includes(index);
+                    }
+                    
+                    questionStatus[currentQuestion] = isCorrect ? 'correct' : 'incorrect';
+
+                    // Show explanation
+                    document.getElementById('explanation').style.display = 'block';
+                    document.getElementById('explanationText').textContent = q.explanation;
+                    
+                    // Update stats and navigation
+                    updateStats();
+                    updateNavigationButtons();
+                }
             }
         }
 
@@ -5788,13 +5978,73 @@ const questions = [
             document.getElementById('progressFill').style.width = `${progress}%`;
         }
 
+        function initializeNavigation() {
+            const navGrid = document.getElementById('navGrid');
+            navGrid.innerHTML = '';
+            
+            for (let i = 0; i < questions.length; i++) {
+                const btn = document.createElement('button');
+                btn.className = 'nav-btn';
+                btn.textContent = i + 1;
+                btn.onclick = () => jumpToQuestion(i);
+                btn.setAttribute('data-question', i);
+                navGrid.appendChild(btn);
+            }
+        }
+
+        function jumpToQuestion(questionIndex) {
+            if (questionIndex >= 0 && questionIndex < questions.length) {
+                currentQuestion = questionIndex;
+                showQuestion();
+                updateProgress();
+                updateNavigationButtons();
+            }
+        }
+
+        function updateNavigationButtons() {
+            const navButtons = document.querySelectorAll('.nav-btn');
+            navButtons.forEach((btn, index) => {
+                btn.classList.remove('current', 'correct', 'incorrect', 'answered');
+                
+                if (index === currentQuestion) {
+                    btn.classList.add('current');
+                } else if (questionStatus[index] === 'correct') {
+                    btn.classList.add('correct');
+                } else if (questionStatus[index] === 'incorrect') {
+                    btn.classList.add('incorrect');
+                } else if (selectedAnswers[index] !== undefined) {
+                    btn.classList.add('answered');
+                }
+            });
+        }
+
+        function updateStats() {
+            let correctCount = 0;
+            let incorrectCount = 0;
+            let unansweredCount = 0;
+
+            for (let i = 0; i < questions.length; i++) {
+                if (questionStatus[i] === 'correct') {
+                    correctCount++;
+                } else if (questionStatus[i] === 'incorrect') {
+                    incorrectCount++;
+                } else if (selectedAnswers[i] === undefined) {
+                    unansweredCount++;
+                }
+            }
+
+            document.getElementById('correctCount').textContent = correctCount;
+            document.getElementById('incorrectCount').textContent = incorrectCount;
+            document.getElementById('unansweredCount').textContent = unansweredCount;
+        }
+
         function showResults() {
             clearInterval(timerInterval);
             
             // Calculate scores
             let correctAnswers = 0;
             for (let i = 0; i < questions.length; i++) {
-                if (selectedAnswers[i] === questions[i].correct) {
+                if (questionStatus[i] === 'correct') {
                     correctAnswers++;
                 }
             }
@@ -5832,7 +6082,7 @@ const questions = [
                 </div>
                 <div class="score-item">
                     <h4>Time Used</h4>
-                    <div class="number">${Math.floor((210 * 60 - timeRemaining) / 60)}m</div>
+                    <div class="number">${Math.floor((500 * 60 - timeRemaining) / 60)}m</div>
                 </div>
             `;
         }
@@ -5840,7 +6090,8 @@ const questions = [
         function restartExam() {
             currentQuestion = 0;
             selectedAnswers = {};
-            timeRemaining = 210 * 60;
+            questionStatus = {};
+            timeRemaining =500 * 60;
             clearInterval(timerInterval);
             
             document.getElementById('results').style.display = 'none';
@@ -5857,7 +6108,30 @@ const questions = [
             // Show first question with answer
             showQuestion();
             if (selectedAnswers[currentQuestion] !== undefined) {
-                selectOption(selectedAnswers[currentQuestion], true);
+                if (Array.isArray(selectedAnswers[currentQuestion])) {
+                    // Multiple choice - show all selections and explanation
+                    selectedAnswers[currentQuestion].forEach(index => {
+                        const option = document.querySelector(`[data-index="${index}"]`);
+                        if (option) option.classList.add('selected');
+                    });
+                    // Show explanation and mark correct/incorrect
+                    const q = questions[currentQuestion];
+                    const correctIndices = Array.isArray(q.correct) ? q.correct : [q.correct];
+                    correctIndices.forEach(ci => {
+                        const opt = document.querySelector(`[data-index="${ci}"]`);
+                        if (opt) opt.classList.add('correct');
+                    });
+                    selectedAnswers[currentQuestion].forEach(selection => {
+                        if (!correctIndices.includes(selection)) {
+                            const opt = document.querySelector(`[data-index="${selection}"]`);
+                            if (opt) opt.classList.add('incorrect');
+                        }
+                    });
+                    document.getElementById('explanation').style.display = 'block';
+                    document.getElementById('explanationText').textContent = q.explanation;
+                } else {
+                    selectOption(selectedAnswers[currentQuestion], true);
+                }
             }
         }
     </script>
