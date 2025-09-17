@@ -398,7 +398,7 @@
         <div class="exam-content">
             <div class="start-screen" id="startScreen">
                 <h2>Welcome to AWS CLF-C02 Practice Exam</h2>
-                <p>This comprehensive mock exam contains 65 questions covering all domains of the AWS Certified Cloud Practitioner certification. You'll have 90 minutes to complete the exam.</p>
+                <p>This comprehensive mock exam contains 511 questions covering all domains of the AWS Certified Cloud Practitioner certification. You'll have 5 hours to complete the exam.</p>
                 <p><strong>Exam Format:</strong></p>
                 <ul style="text-align: left; max-width: 600px; margin: 0 auto 30px; color: #666;">
                     <li>Multiple choice questions</li>
@@ -5773,7 +5773,7 @@ const questions = [
 
         let currentQuestion = 0;
         let selectedAnswers = {};
-        let timeRemaining =500 * 60; // 90 minutes in seconds
+        let timeRemaining =300 * 60; // 90 minutes in seconds
         let timerInterval;
         let examStarted = false;
         let questionStatus = {}; // Track status of each question: 'correct', 'incorrect', 'unanswered'
@@ -6082,7 +6082,7 @@ const questions = [
                 </div>
                 <div class="score-item">
                     <h4>Time Used</h4>
-                    <div class="number">${Math.floor((500 * 60 - timeRemaining) / 60)}m</div>
+                    <div class="number">${Math.floor((300 * 60 - timeRemaining) / 60)}m</div>
                 </div>
             `;
         }
@@ -6091,7 +6091,7 @@ const questions = [
             currentQuestion = 0;
             selectedAnswers = {};
             questionStatus = {};
-            timeRemaining =500 * 60;
+            timeRemaining =300 * 60;
             clearInterval(timerInterval);
             
             document.getElementById('results').style.display = 'none';
